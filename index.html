@@ -436,6 +436,7 @@ const num=v=>{const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?0:n
 
 let prog={seances:[]},sessions=[],draft=null,tab='seance',selEx='',col=null,armed='',tmr,imgs={},assets=null;
 const blank=()=>({w:'',r:'',p:'',n:''});
+const saveDraft=()=>{try{if(draft)localStorage.setItem('muscu_draft',JSON.stringify(draft))}catch(e){}};
 const ik=n=>String(n||'').trim().toLowerCase();
 const fmtSet=x=>x.w+'×'+x.r+(x.p?' @'+x.p:'')+(x.n?' ('+esc(x.n)+')':'');
 const thumb=(n,sm)=>imgs[ik(n)]?`<img class="thumb ${sm?'sm':''}" data-act="zoom" src="${imgs[ik(n)].indexOf('data:')===0?imgs[ik(n)]:'/_blob/'+imgs[ik(n)]}" alt="">`:'';
@@ -502,6 +503,7 @@ const vol=s=>s.ex.reduce((a,e)=>a+e.sets.reduce((b,x)=>b+x.w*x.r,0),0);
 function render(){
   const tabIcons={seance:'🏋️‍♂️', prog:'📋', suivi:'📈'};
   $('#nav').innerHTML=[['seance','Séance'],['prog','Programme'],['suivi','Progression']].map(([k,l])=>`<button data-act="tab" data-v="${k}" class="${tab===k?'on':''}">${tabIcons[k]} ${l}</button>`).join('');
+  if(tab==='seance')saveDraft();
   $('#exlist').innerHTML=exNames().map(n=>`<option value="${esc(n)}">`).join('');
   $('#app').innerHTML=(tab==='seance'?vSeance():tab==='prog'?vProg():vSuivi())+(tab==='seance'?'':vData());
 }
@@ -525,7 +527,7 @@ function vSeance(){
   });
   
   h+=`<div class="card"><div class="row"><input class="grow" id="newex" list="exlist" placeholder="Exercice (ex. Développé couché)"><button class="btn sm" data-act="addex">➕ Ajouter</button></div></div>
-  <button class="btn full" data-act="save">💾 Enregistrer la séance</button>`;
+  <button class="btn full" data-act="save">💾 Enregistrer la séance</button><div style="height:8px"></div><button class="btn bad full" data-act="clear">${armed==='clr'?'Confirmer ?':'🗑️ Vider la séance en cours'}</button>`;
   return h;
 }
 
@@ -631,8 +633,8 @@ const A=$('#app');
 
 document.addEventListener('input',e=>{
   const t=e.target,d=t.dataset;
-  if(d.k){draft.ex[+d.i].sets[+d.j][d.k]=t.value;return}
-  if(d.d){draft[d.d]=t.value;return}
+  if(d.k){draft.ex[+d.i].sets[+d.j][d.k]=t.value;saveDraft();return}
+  if(d.d){draft[d.d]=t.value;saveDraft();return}
   if(d.p){
     const s=prog.seances[+d.s];
     if(d.p==='sn')s.name=t.value;
@@ -665,11 +667,12 @@ document.addEventListener('click',e=>{
   else if(a==='rmset'){const s=draft.ex[+d.i].sets;if(s.length>1)s.splice(+d.j,1)}
   else if(a==='rmex'){draft.ex.splice(+d.i,1)}
   else if(a==='addex'){const n=$('#newex').value.trim();if(!n)return;draft.ex.push({name:n,sets:[blank(),blank(),blank()]})}
+  else if(a==='clear'){if(!arm('clr'))return;armed='';draft=null;try{localStorage.removeItem('muscu_draft')}catch(e){}}
   else if(a==='save'){
     const ex=draft.ex.map(x=>({name:x.name,sets:x.sets.map(s=>({w:num(s.w),r:Math.round(num(s.r)),p:num(s.p),n:String(s.n||'').trim()})).filter(s=>s.r>0)})).filter(x=>x.sets.length);
     if(!ex.length){alert('Ajoute au moins une série avec des répétitions.');return}
     const s={id:gid(),ts:Date.now(),date:draft.date||today(),name:draft.name,ex};
-    Promise.resolve(saveSession(s)).then(()=>{draft=null;tab='suivi';render()}).catch(()=>alert('Enregistrement impossible, réessaie.'));
+    Promise.resolve(saveSession(s)).then(()=>{draft=null;try{localStorage.removeItem('muscu_draft')}catch(e){}tab='suivi';render()}).catch(()=>alert('Enregistrement impossible, réessaie.'));
     return;
   }
   else if(a==='addseance'){prog.seances.push({id:gid(),name:'Séance '+(prog.seances.length+1),exercises:[]});saveProg()}
@@ -689,6 +692,7 @@ document.addEventListener('change',e=>{
 
 /* ---------- démarrage ---------- */
 (async function(){
+  try{const x=JSON.parse(localStorage.getItem('muscu_draft')||'null');if(x&&Array.isArray(x.ex))draft=x}catch(e){}
   render();
   let ok=false;
   try{
